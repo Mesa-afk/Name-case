@@ -18,6 +18,8 @@ npm start          # http://localhost:3000
 
 Переменные окружения — см. `.env.example` (`PORT`, `JWT_SECRET`, `ADMIN_ACCESS_CODE`).
 
+Данные демо-площадок создаются автоматически при первом запуске. Если в `server/database/storage/` осталась база от предыдущей версии проекта, сбросьте её командой `npm run reset-db` — сервер заново засеет её актуальными данными.
+
 ## Что реализовано по ТЗ
 
 **Посетитель**
@@ -53,6 +55,7 @@ npm start          # http://localhost:3000
 │   │   ├── db.js               # Хранилище (SQLite / JSON)
 │   │   ├── seed.js             # Начальные пользователи, площадки, статистика
 │   │   ├── seed-cli.js         # npm run seed
+│   │   ├── reset-cli.js        # npm run reset-db (сброс локальной БД)
 │   │   └── storage/            # Файл БД (в .gitignore)
 │   ├── middleware/
 │   │   ├── auth.js             # JWT: optionalAuth / requireAuth / requireOrganizer
@@ -72,17 +75,30 @@ npm start          # http://localhost:3000
     │   └── panoramas/*.svg     # Демо-панорамы 360°
     ├── uploads/                # Загруженные файлы (в .gitignore)
     └── js/
-        ├── app.js              # Состояние и логика приложения
-        ├── data/
-        │   ├── i18n.js         # Тексты RU / EN
-        │   └── seed-spaces.js  # Демо-площадки, планы, графы, панорамы
-        └── services/
-            ├── api.js          # REST-клиент, офлайн-кэш, синхронизация
-            ├── navigation.js   # Построение маршрутов
-            ├── map-renderer.js # SVG-рендер этажей и территории
-            ├── panorama.js     # Съёмка, сшивка 360°, QR-код
-            └── floorplan-ai.js # Распознавание плана, 3D по фото
+        ├── app.js              # Состояние Alpine.js + весь обмен с REST API (JWT, аналитика, загрузки, офлайн-очередь)
+        └── spaces-data.js      # Тексты RU/EN и демо-площадки: офлайн-кэш фронтенда и начальные данные для БД
 ```
+
+## Связка фронтенда и бекенда
+
+Фронтенд (`public/index.html` + `js/app.js`) — это Alpine.js-приложение, которое работает поверх REST API, а не на локальных моках:
+
+| Действие в интерфейсе | Запрос к бекенду |
+|-----------------------|------------------|
+| Вход по email и паролю | `POST /api/auth/login` → JWT в `localStorage`, пользователь из ответа |
+| Регистрация | `POST /api/auth/register` → JWT, роль `visitor`/`organizer` |
+| Вход в админ-панель по коду | `POST /api/auth/admin-unlock` (код `admin2026`) → JWT организатора |
+| Перезагрузка страницы | `GET /api/auth/me` — сессия восстанавливается по токену |
+| Выход | токен удаляется из браузера (JWT stateless) |
+| Каталог и карта | `GET /api/spaces` (с JWT организатора видны и черновики) |
+| Карта под PIN-кодом | `GET /api/spaces/:id?pin=...` |
+| Кнопка «Сохранить изменения» | `PUT /api/spaces/:id` — постоянная ссылка `/s/:id` не меняется |
+| Загрузка планировки (SVG/PNG) | `POST /api/uploads/file` → `PUT /api/spaces/:id` |
+| Просмотры карты, точек, панорам, маршруты | `POST /api/analytics/event` (`map_view`, `poi_view`, `pano_view`, `route_built`) |
+| График и карточки аналитики | `GET /api/analytics/summary` (только организатор) |
+| Офлайн-режим | события копятся в `localStorage`, при возврате в сеть уходят на сервер + событие `offline_sync` |
+
+Если сервер или сеть недоступны, приложение продолжает работать на локальном кэше из `js/spaces-data.js` (офлайн-режим PWA), а затем подтягивает данные с сервера.
 
 ## API
 

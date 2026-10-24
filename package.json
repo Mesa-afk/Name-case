@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --no-warnings server/index.js",
     "dev": "node --no-warnings --watch server/index.js",
-    "seed": "node --no-warnings server/database/seed-cli.js"
+    "seed": "node --no-warnings server/database/seed-cli.js",
+    "reset-db": "node --no-warnings server/database/reset-cli.js"
   },
   "keywords": [
     "indoor-navigation",

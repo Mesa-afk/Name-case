@@ -1,7 +1,9 @@
 const bcrypt = require('bcryptjs');
 const db = require('./db');
 const config = require('../config/config');
-const { defaultSpacesData } = require('../../public/js/data/seed-spaces');
+// Начальная база площадок берётся из тех же данных, что и офлайн-кэш фронтенда,
+// поэтому сервер и клиент всегда описывают карты одинаково.
+const { spacesData: defaultSpacesData } = require('../../public/js/spaces-data');
 
 function ensureSeedData() {
     // 1. Базовые пользователи (организатор/администратор и посетитель)
@@ -23,11 +25,15 @@ function ensureSeedData() {
         });
     }
 
-    // 2. Пространства по умолчанию
+    // 2. Пространства по умолчанию (опубликованные, без PIN-кода)
     if (db.countSpaces() === 0) {
         const admin = db.findUserByEmail('admin@ttk.ru');
         for (const [id, space] of Object.entries(defaultSpacesData)) {
-            db.upsertSpace(id, space, admin ? admin.id : null);
+            db.upsertSpace(id, {
+                ...space,
+                published: true,
+                accessPin: ''
+            }, admin ? admin.id : null);
         }
     }
 
@@ -49,12 +55,14 @@ function ensureSeedData() {
         db.recordEvent({ spaceId: 'hotel', eventType: 'map_view', hourBucket: 14, count: 520 });
         db.recordEvent({ spaceId: 'hub', eventType: 'map_view', hourBucket: 16, count: 310 });
 
+        // Точки интереса «ТТК Плаза»: 101 — главный вход, 102 — переговорная «Альфа»
         db.recordEvent({ spaceId: 'plaza', poiId: '101', eventType: 'poi_view', hourBucket: 10, count: 420 });
+        db.recordEvent({ spaceId: 'plaza', poiId: '102', eventType: 'poi_view', hourBucket: 12, count: 380 });
         db.recordEvent({ spaceId: 'plaza', poiId: '102', eventType: 'route_built', hourBucket: 12, count: 315 });
-        db.recordEvent({ spaceId: 'plaza', poiId: '104', eventType: 'route_built', hourBucket: 14, count: 290 });
-        db.recordEvent({ spaceId: 'expo', poiId: '202', eventType: 'pano_view', hourBucket: 12, count: 510 });
-        db.recordEvent({ spaceId: 'hotel', poiId: '301', eventType: 'pano_view', hourBucket: 14, count: 390 });
+        db.recordEvent({ spaceId: 'plaza', poiId: '101', eventType: 'route_built', hourBucket: 14, count: 290 });
         db.recordEvent({ spaceId: 'plaza', poiId: '101', eventType: 'pano_view', hourBucket: 16, count: 460 });
+        db.recordEvent({ spaceId: 'plaza', poiId: '102', eventType: 'pano_view', hourBucket: 12, count: 510 });
+
         db.recordEvent({ spaceId: 'plaza', eventType: 'offline_sync', hourBucket: 12, count: 185 });
         db.recordEvent({ spaceId: 'expo', eventType: 'offline_sync', hourBucket: 14, count: 140 });
     }

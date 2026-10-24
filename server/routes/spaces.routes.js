@@ -147,8 +147,9 @@ router.post('/', requireOrganizer, (req, res) => {
                 id: Date.now() % 100000,
                 building: 'A',
                 floor: 1,
-                x: 360,
-                y: 320,
+                // Координаты в процентах от размера карты (как на клиенте: poi.x * 6.8 px)
+                x: 50,
+                y: 75,
                 campusX: 360,
                 campusY: 310,
                 navNodeId: 'n_entry',

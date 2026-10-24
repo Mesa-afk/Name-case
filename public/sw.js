@@ -1,24 +1,11 @@
-const CACHE_NAME = 'ttk-offline-v1';
+const CACHE_NAME = 'ttk-offline-v2';
 const CORE_ASSETS = [
     '/',
     '/index.html',
     '/manifest.webmanifest',
     '/css/style.css',
     '/assets/icons/icon.svg',
-    '/assets/panoramas/plaza-lobby.svg',
-    '/assets/panoramas/plaza-corridor.svg',
-    '/assets/panoramas/plaza-meeting.svg',
-    '/assets/panoramas/plaza-congress.svg',
-    '/assets/panoramas/expo-hall.svg',
-    '/assets/panoramas/hotel-lobby.svg',
-    '/assets/panoramas/campus-courtyard.svg',
-    '/js/data/i18n.js',
-    '/js/data/seed-spaces.js',
-    '/js/services/api.js',
-    '/js/services/navigation.js',
-    '/js/services/panorama.js',
-    '/js/services/floorplan-ai.js',
-    '/js/services/map-renderer.js',
+    '/js/spaces-data.js',
     '/js/app.js'
 ];
 
@@ -41,8 +28,9 @@ self.addEventListener('fetch', (event) => {
     if (req.method !== 'GET') return;
 
     const url = new URL(req.url);
+    if (url.origin !== self.location.origin) return;
 
-    // Для API — сначала сеть, при отсутствии сети — кэш
+    // Для API — сначала сеть, при отсутствии сети — последний удачный ответ из кэша
     if (url.pathname.startsWith('/api/')) {
         event.respondWith(
             fetch(req)
@@ -56,7 +44,7 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Для статики и панорам — быстрый ответ из кэша с фоновым обновлением (Stale-While-Revalidate)
+    // Для статики — быстрый ответ из кэша с фоновым обновлением (Stale-While-Revalidate)
     event.respondWith(
         caches.match(req).then((cached) => {
             const networkFetch = fetch(req)
