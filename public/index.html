@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#E31B23">
+    <meta name="description" content="ТТК — интерактивная карта пространства: 2D/3D-планы зданий, панорамы 360°, навигация внутри зданий и по территории мероприятий.">
+    <title>ТТК — Карта пространства и навигация</title>
+
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="/assets/icons/icon.svg">
+    <link rel="apple-touch-icon" href="/assets/icons/icon.svg">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Roboto', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#fef2f2', 100: '#fee2e2', 200: '#fca5a5', 300: '#f87171', 400: '#ef4444',
+                            500: '#dc2626', 600: '#E31B23', 700: '#b91c1c', 800: '#991b1b', 900: '#7f1d1d'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Lucide Icons & Chart.js -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Fonts & Styles -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!-- Application modules (load before Alpine) -->
+    <script src="/js/data/i18n.js"></script>
+    <script src="/js/data/seed-spaces.js"></script>
+    <script src="/js/services/api.js"></script>
+    <script src="/js/services/navigation.js"></script>
+    <script src="/js/services/panorama.js"></script>
+    <script src="/js/services/floorplan-ai.js"></script>
+    <script src="/js/services/map-renderer.js"></script>
+    <script src="/js/app.js"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body class="h-full text-slate-800 dark:text-slate-100 flex flex-col antialiased min-h-screen bg-white dark:bg-slate-950 font-sans" x-data="appState()" x-init="init()" @resize.window="measurePanoViewport()">
+
+    <!-- ======================= HEADER ======================= -->
+    <header x-show="!isEmbedMode" class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-3">
+            <!-- Logo -->
+            <div class="flex items-center cursor-pointer select-none shrink-0" @click="currentView = 'spaces'">
+                <div class="flex flex-col items-start leading-none">
+                    <span class="text-3xl sm:text-4xl font-black tracking-tight text-brand-600">TTK<span class="text-slate-900 dark:text-white">.</span></span>
+                    <span class="text-[9px] font-bold tracking-widest text-slate-400 uppercase mt-0.5">Карта пространства</span>
+                </div>
+            </div>
+
+            <!-- Desktop nav -->
+            <nav class="hidden md:flex items-center space-x-2 lg:space-x-4 whitespace-nowrap justify-center flex-1">
+                <button @click="currentView = 'spaces'" :class="currentView === 'spaces' ? 'bg-slate-100 dark:bg-slate-800 text-brand-600 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'" class="px-3.5 py-2 rounded-xl text-sm transition" x-text="t.navSpaces"></button>
+                <button @click="currentView = 'map'; refreshIcons()" :class="currentView === 'map' ? 'bg-slate-100 dark:bg-slate-800 text-brand-600 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'" class="px-3.5 py-2 rounded-xl text-sm transition" x-text="t.navMap"></button>
+                <button @click="currentView = user ? 'cabinet' : 'auth'" :class="currentView === 'cabinet' ? 'bg-slate-100 dark:bg-slate-800 text-brand-600 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'" class="px-3.5 py-2 rounded-xl text-sm transition" x-text="t.navCabinet"></button>
+                <button @click="attemptAdminAccess()" :class="currentView === 'admin' ? 'bg-slate-100 dark:bg-slate-800 text-brand-600 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'" class="px-3.5 py-2 rounded-xl text-sm transition flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-brand-600"></i><span x-text="t.navAdmin"></span>
+                </button>
+            </nav>
+
+            <!-- Right controls -->
+            <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+                <div class="relative hidden xl:block w-52">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400"><i data-lucide="search" class="w-3.5 h-3.5"></i></span>
+                    <input type="text" x-model="topSearchQuery" @keydown.enter="executeTopSearch()" :placeholder="t.searchPlaceholder" class="w-full pl-9 pr-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand-600">
+                </div>
+
+                <button @click="toggleOfflineMode()" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-bold transition" :class="isOffline ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-300' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-300'" :title="t.downloadOfflineBtn">
+                    <span class="w-2 h-2 rounded-full" :class="offlineCachingBusy ? 'bg-sky-500 animate-ping' : (isOffline ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500')"></span>
+                    <span class="hidden sm:inline" x-text="isOffline ? t.offlineModeOn : t.offlineModeOff"></span>
+                </button>
+
+                <div class="hidden sm:flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700">
+                    <button @click="switchLanguage('ru')" :class="lang === 'ru' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500'" class="px-2.5 py-1 rounded-lg transition">RU</button>
+                    <button @click="switchLanguage('en')" :class="lang === 'en' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500'" class="px-2.5 py-1 rounded-lg transition">EN</button>
+                </div>
+
+                <button @click="toggleDarkMode()" class="p-2 rounded-xl text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Тема">
+                    <i x-show="!darkMode" data-lucide="moon" class="w-4 h-4"></i>
+                    <i x-show="darkMode" data-lucide="sun" class="w-4 h-4 text-amber-400"></i>
+                </button>
+
+                <button x-show="user" @click="currentView = 'cabinet'" class="hidden sm:flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm">
+                    <i data-lucide="user" class="w-3.5 h-3.5"></i><span x-text="user ? user.name.split(' ')[0] : ''"></span>
+                </button>
+                <button x-show="!user" @click="currentView = 'auth'" class="hidden sm:flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold transition shadow-sm">
+                    <i data-lucide="log-in" class="w-3.5 h-3.5"></i><span x-text="t.navLogin"></span>
+                </button>
+
+                <button @click="mobileMenuOpen = !mobileMenuOpen" class="md:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile drawer -->
+        <div x-show="mobileMenuOpen" x-cloak x-transition class="md:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-4 space-y-3">
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400"><i data-lucide="search" class="w-4 h-4"></i></span>
+                <input type="text" x-model="topSearchQuery" @keydown.enter="executeTopSearch(); mobileMenuOpen = false" :placeholder="t.searchPlaceholder" class="w-full pl-10 pr-3 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-600">
+            </div>
+            <div class="flex gap-2">
+                <button @click="switchLanguage('ru')" :class="lang === 'ru' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-800'" class="flex-1 py-2 rounded-xl text-xs font-bold">RU</button>
+                <button @click="switchLanguage('en')" :class="lang === 'en' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-800'" class="flex-1 py-2 rounded-xl text-xs font-bold">EN</button>
+                <button x-show="!user" @click="currentView = 'auth'; mobileMenuOpen = false" class="flex-1 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white dark:bg-white dark:text-slate-900" x-text="t.navLogin"></button>
+                <button x-show="user" @click="logoutUser(); mobileMenuOpen = false" class="flex-1 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-rose-500">Выйти</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ======================= MAIN ======================= -->
+    <main class="flex-1 flex flex-col bg-white dark:bg-slate-950" :class="isEmbedMode ? 'pb-0' : 'pb-20 md:pb-6'">
+
+        <!-- ============ VIEW 1: SPACES ============ -->
+        <section x-show="currentView === 'spaces'" class="p-4 sm:p-8 lg:p-10">
+            <div class="max-w-7xl mx-auto space-y-10 sm:space-y-12">
+
+                <!-- Hero -->
+                <div class="bg-slate-950 text-white rounded-3xl shadow-2xl border border-slate-800 grid grid-cols-1 lg:grid-cols-2 overflow-hidden min-h-[380px] relative">
+                    <div class="absolute inset-0 bg-gradient-to-r from-brand-600/15 via-slate-900/40 to-transparent pointer-events-none"></div>
+                    <div class="p-6 sm:p-10 lg:p-14 flex flex-col justify-between gap-6 z-10">
+                        <div class="space-y-4">
+                            <span class="bg-brand-600 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full uppercase tracking-wider inline-block shadow-md" x-text="t.heroBadge"></span>
+                            <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight" x-text="t.heroTitle"></h1>
+                            <p class="text-slate-300 text-sm sm:text-base leading-relaxed" x-text="t.heroDesc"></p>
+                        </div>
+                        <div class="flex flex-wrap gap-3">
+                            <button @click="selectSpaceAndOpenMap('plaza')" class="bg-brand-600 hover:bg-brand-700 text-white font-bold px-5 py-3 rounded-2xl shadow-xl transition hover:scale-[1.03] text-sm flex items-center gap-2">
+                                <i data-lucide="map" class="w-4 h-4"></i><span x-text="t.openMapBtn"></span>
+                            </button>
+                            <button @click="photoSearchModalOpen = true; refreshIcons()" class="bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-700 font-bold px-5 py-3 rounded-2xl transition hover:scale-[1.03] text-sm flex items-center gap-2">
+                                <i data-lucide="camera" class="w-4 h-4 text-slate-300"></i><span x-text="t.searchPhotoBtn"></span>
+                            </button>
+                            <button @click="attemptAdminAccess()" class="bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold px-5 py-3 rounded-2xl transition hover:scale-[1.03] text-sm flex items-center gap-2">
+                                <i data-lucide="pen-tool" class="w-4 h-4"></i><span x-text="t.createMapBtn"></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative bg-cover bg-center min-h-[220px] lg:min-h-full" style="background-image: url('https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80')">
+                        <div class="absolute inset-0 bg-slate-950/55"></div>
+                        <div class="absolute bottom-4 left-4 right-4 grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-black/60 backdrop-blur rounded-2xl p-3"><div class="text-xl font-black" x-text="spaceList.length"></div><div class="text-[10px] uppercase tracking-wider text-slate-300">площадок</div></div>
+                            <div class="bg-black/60 backdrop-blur rounded-2xl p-3"><div class="text-xl font-black">360°</div><div class="text-[10px] uppercase tracking-wider text-slate-300">панорамы</div></div>
+                            <div class="bg-black/60 backdrop-blur rounded-2xl p-3"><div class="text-xl font-black">2D/3D</div><div class="text-[10px] uppercase tracking-wider text-slate-300">планы</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature strip -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+                    <div class="rounded-3xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 bg-white dark:bg-slate-900">
+                        <div class="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-900/30 text-brand-600 flex items-center justify-center mb-3"><i data-lucide="layout-dashboard" class="w-5 h-5"></i></div>
+                        <h3 class="font-bold text-sm">Редактор 2D-плана</h3>
+                        <p class="text-xs text-slate-500 mt-1">Стены, комнаты, проходы, стенды и точки Wi-Fi прямо в браузере</p>
+                    </div>
+                    <div class="rounded-3xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 bg-white dark:bg-slate-900">
+                        <div class="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-900/30 text-sky-600 flex items-center justify-center mb-3"><i data-lucide="rotate-3d" class="w-5 h-5"></i></div>
+                        <h3 class="font-bold text-sm">Панорамы с телефона</h3>
+                        <p class="text-xs text-slate-500 mt-1">Мастер съёмки 8 кадров и автоматическая сшивка в 360°</p>
+                    </div>
+                    <div class="rounded-3xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 bg-white dark:bg-slate-900">
+                        <div class="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center mb-3"><i data-lucide="navigation" class="w-5 h-5"></i></div>
+                        <h3 class="font-bold text-sm">Маршруты</h3>
+                        <p class="text-xs text-slate-500 mt-1">Между этажами и корпусами, с проходом пути в панорамах</p>
+                    </div>
+                    <div class="rounded-3xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 bg-white dark:bg-slate-900">
+                        <div class="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center mb-3"><i data-lucide="wifi-off" class="w-5 h-5"></i></div>
+                        <h3 class="font-bold text-sm">Без интернета</h3>
+                        <p class="text-xs text-slate-500 mt-1">PWA: карта и панорамы сохраняются на устройстве</p>
+                    </div>
+                </div>
+
+                <!-- Spaces grid -->
+                <div>
+                    <div class="flex items-end justify-between mb-6 gap-4">
+                        <div>
+                            <h2 class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white" x-text="t.spacesTitle"></h2>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" x-text="t.spacesSub"></p>
+                        </div>
+                        <div class="hidden sm:flex items-center gap-3">
+                            <span class="text-xs font-bold text-slate-400" x-text="(carouselIndex + 1) + ' / ' + spaceList.length"></span>
+                            <button @click="prevSpace()" class="p-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                            <button @click="nextSpace()" class="p-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-7">
+                        <template x-for="key in spaceList" :key="key">
+                            <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group flex flex-col" :class="currentSpaceKey === key ? 'ring-2 ring-brand-600' : ''" @click="selectSpaceAndOpenMap(key)">
+                                <div class="h-48 bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
+                                    <img :src="spacesData[key].image" :alt="spacesData[key].name[lang]" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                                    <div class="absolute top-3 left-3 bg-brand-600 text-white text-[11px] font-bold px-3 py-1 rounded-xl uppercase tracking-wider shadow" x-text="spacesData[key].type[lang]"></div>
+                                    <div x-show="spacesData[key].pinRequired" class="absolute bottom-3 left-3 bg-amber-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-xl flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> PIN</div>
+                                    <button @click.stop="toggleFavorite(spacesData[key].id, $event)" class="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-800/90 shadow-md flex items-center justify-center transition hover:scale-110">
+                                        <i data-lucide="heart" class="w-4 h-4" :class="isFavorite(spacesData[key].id) ? 'fill-rose-500 text-rose-500' : 'text-slate-500'"></i>
+                                    </button>
+                                    <div class="absolute bottom-3 right-3 bg-black/80 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-xl font-bold" x-text="spacesData[key].price"></div>
+                                </div>
+                                <div class="p-5 sm:p-6 flex-1 flex flex-col justify-between gap-4">
+                                    <div class="space-y-2">
+                                        <div class="flex items-center gap-1 text-xs font-bold text-amber-500">
+                                            <span>★</span><span x-text="spacesData[key].rating"></span>
+                                            <span class="text-slate-400 font-normal" x-text="'(' + spacesData[key].reviewsCount + ') • ' + (spacesData[key].city || '')"></span>
+                                        </div>
+                                        <h3 class="text-lg font-bold text-slate-900 dark:text-white group-hover:text-brand-600 transition" x-text="spacesData[key].name[lang]"></h3>
+                                        <p class="text-slate-600 dark:text-slate-300 text-xs leading-relaxed line-clamp-2" x-text="spacesData[key].desc[lang]"></p>
+                                        <div class="flex flex-wrap gap-1.5 pt-1 text-[10px] font-bold text-slate-500">
+                                            <span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800" x-text="Object.keys(spacesData[key].buildings || {}).length + (lang === 'ru' ? ' корп.' : ' bldg')"></span>
+                                            <span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800" x-text="(spacesData[key].pois || []).length + (lang === 'ru' ? ' точек' : ' places')"></span>
+                                            <span class="px-2 py-0.5 rounded-lg bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300" x-text="Object.keys(spacesData[key].panoramas || {}).length + ' × 360°'"></span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 text-xs">
+                                        <button @click.stop="selectSpaceAndOpenMap(key)" class="text-brand-600 font-bold hover:underline flex items-center gap-1.5"><i data-lucide="map" class="w-3.5 h-3.5"></i><span x-text="lang === 'ru' ? 'Открыть карту' : 'Open map'"></span></button>
+                                        <button @click.stop="openSpaceFullPage(key)" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5"><span x-text="t.panoBtn"></span><i data-lucide="rotate-3d" class="w-3.5 h-3.5"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ VIEW 2: MAP & NAVIGATION ============ -->
+        <section x-show="currentView === 'map'" x-cloak class="flex-1 flex flex-col lg:flex-row relative">
+
+            <!-- Mobile switcher -->
+            <div class="lg:hidden flex p-2 gap-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-16 z-20">
+                <button @click="mobileMapTab = 'plan'; refreshIcons()" :class="mobileMapTab === 'plan' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-800'" class="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="map" class="w-3.5 h-3.5"></i><span x-text="lang === 'ru' ? 'План' : 'Plan'"></span></button>
+                <button @click="mobileMapTab = 'sidebar'; refreshIcons()" :class="mobileMapTab === 'sidebar' ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-800'" class="flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="navigation" class="w-3.5 h-3.5"></i><span x-text="lang === 'ru' ? 'Маршрут и место' : 'Route & place'"></span></button>
+            </div>
+
+            <!-- Sidebar -->
+            <aside :class="mobileMapTab === 'sidebar' ? 'flex' : 'hidden lg:flex'" class="w-full lg:w-[380px] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-col z-10 lg:max-h-[calc(100vh-80px)] lg:overflow-y-auto custom-scrollbar">
+                <!-- Space header -->
+                <div class="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 space-y-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <span class="text-[10px] font-bold text-brand-600 uppercase tracking-wider" x-text="currentSpace.type ? currentSpace.type[lang] : ''"></span>
+                            <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight" x-text="currentSpace.name ? currentSpace.name[lang] : ''"></h2>
+                        </div>
+                        <select x-model="currentSpaceKey" @change="selectSpaceAndOpenMap(currentSpaceKey)" class="text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1.5 max-w-[130px]">
+                            <template x-for="k in spaceList" :key="k"><option :value="k" :selected="k === currentSpaceKey" x-text="spacesData[k].name[lang]"></option></template>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Route builder -->
+                <div class="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 space-y-3">
+                    <h3 class="text-sm font-black flex items-center gap-2"><i data-lucide="route" class="w-4 h-4 text-brand-600"></i><span x-text="t.routeTitle"></span></h3>
+                    <div class="flex gap-2 items-stretch">
+                        <div class="flex-1 space-y-2">
+                            <div class="flex gap-1.5">
+                                <span class="w-7 h-9 shrink-0 rounded-lg bg-slate-900 text-white text-xs font-black flex items-center justify-center">A</span>
+                                <select x-model="routeFrom" @change="routeActive && recalculateRoute(false)" class="flex-1 min-w-0 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2">
+                                    <template x-for="poi in (currentSpace.pois || [])" :key="'f' + poi.id"><option :value="String(poi.id)" :selected="String(poi.id) === routeFrom" x-text="poi.name[lang] + ' · ' + poi.building + '/' + poi.floor"></option></template>
+                                </select>
+                                <button @click="pickingRoutePoint = 'from'; mobileMapTab = 'plan'; showNotification(lang === 'ru' ? 'Нажмите на точку на карте' : 'Tap a point on the map')" class="w-9 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center" :class="pickingRoutePoint === 'from' ? 'ring-2 ring-brand-600' : ''" title="Выбрать на карте"><i data-lucide="crosshair" class="w-3.5 h-3.5"></i></button>
+                            </div>
+                            <div class="flex gap-1.5">
+                                <span class="w-7 h-9 shrink-0 rounded-lg bg-brand-600 text-white text-xs font-black flex items-center justify-center">B</span>
+                                <select x-model="routeTo" @change="routeActive && recalculateRoute(false)" class="flex-1 min-w-0 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2">
+                                    <template x-for="poi in (currentSpace.pois || [])" :key="'t' + poi.id"><option :value="String(poi.id)" :selected="String(poi.id) === routeTo" x-text="poi.name[lang] + ' · ' + poi.building + '/' + poi.floor"></option></template>
+                                </select>
+                                <button @click="pickingRoutePoint = 'to'; mobileMapTab = 'plan'; showNotification(lang === 'ru' ? 'Нажмите на точку на карте' : 'Tap a point on the map')" class="w-9 shrink-0 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center" :class="pickingRoutePoint === 'to' ? 'ring-2 ring-brand-600' : ''" title="Выбрать на карте"><i data-lucide="crosshair" class="w-3.5 h-3.5"></i></button>
+                            </div>
+                        </div>
+                        <button @click="swapRouteEndpoints()" class="w-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200" title="Поменять местами"><i data-lucide="arrow-up-down" class="w-4 h-4"></i></button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button @click="buildRoute()" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md flex items-center justify-center gap-1.5"><i data-lucide="navigation" class="w-3.5 h-3.5"></i><span x-text="t.buildRouteBtn"></span></button>
+                        <button @click="clearRoute()" class="px-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold" x-text="t.resetBtn"></button>
+                    </div>
+
+                    <!-- Route summary -->
+                    <template x-if="routeActive && computedRoute">
+                        <div class="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-baseline gap-2">
+                                    <span class="text-xl font-black text-brand-600" x-text="computedRoute.estimatedMinutes + (lang === 'ru' ? ' мин' : ' min')"></span>
+                                    <span class="text-xs text-slate-500" x-text="computedRoute.totalMeters + (lang === 'ru' ? ' м пешком' : ' m walk')"></span>
+                                </div>
+                                <span class="text-[10px] font-bold px-2 py-1 rounded-lg bg-white dark:bg-slate-900" x-text="computedRoute.steps.length + (lang === 'ru' ? ' шага' : ' steps')"></span>
+                            </div>
+                            <ol class="space-y-1.5">
+                                <template x-for="step in computedRoute.steps" :key="step.index">
+                                    <li @click="focusRouteStep(step)" class="flex gap-2 items-start text-xs cursor-pointer hover:bg-white dark:hover:bg-slate-900 rounded-lg p-1.5 transition">
+                                        <span class="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black text-white" :class="step.mode === 'arrive' ? 'bg-brand-600' : step.mode === 'elevator' ? 'bg-indigo-500' : step.mode === 'outdoor' ? 'bg-emerald-500' : 'bg-slate-900 dark:bg-slate-600'" x-text="step.index"></span>
+                                        <span class="leading-snug" x-text="step.text[lang]"></span>
+                                    </li>
+                                </template>
+                            </ol>
+                            <button @click="startRoutePanoramaWalkthrough()" :disabled="!computedRoute.panoramaTour.length" class="w-full bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white dark:bg-white dark:text-slate-900 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5">
+                                <i data-lucide="footprints" class="w-3.5 h-3.5"></i><span x-text="t.walkPanoBtn + ' (' + computedRoute.panoramaTour.length + ')'"></span>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Selected place card -->
+                <div class="p-4 sm:p-5 flex-1">
+                    <template x-if="selectedPoi">
+                        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                            <div class="h-40 relative overflow-hidden bg-slate-900">
+                                <img :src="selectedPoi.image" class="w-full h-full object-cover" loading="lazy">
+                                <span class="absolute top-2.5 left-2.5 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-lg uppercase tracking-wider shadow" :style="'background:' + categoryColor(selectedPoi.category)" x-text="selectedPoi.categoryName ? selectedPoi.categoryName[lang] : ''"></span>
+                                <button @click="toggleFavorite(selectedPoi.id, $event)" class="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-800/90 flex items-center justify-center"><i data-lucide="heart" class="w-4 h-4" :class="isFavorite(selectedPoi.id) ? 'fill-rose-500 text-rose-500' : 'text-slate-500'"></i></button>
+                                <div class="absolute bottom-2.5 left-2.5 right-2.5 flex gap-2">
+                                    <button @click="openPanorama(selectedPoi)" class="flex-1 bg-black/75 backdrop-blur-md text-white text-xs py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 border border-white/25 hover:bg-black/90"><i data-lucide="rotate-3d" class="w-3.5 h-3.5"></i><span x-text="t.panoBtn"></span></button>
+                                    <button @click="openRoom3DViewer(selectedPoi)" class="px-3 bg-black/75 backdrop-blur-md text-white text-xs py-2 rounded-xl font-bold flex items-center gap-1 border border-white/25 hover:bg-black/90"><i data-lucide="box" class="w-3.5 h-3.5"></i>3D</button>
+                                </div>
+                            </div>
+                            <div class="p-4 space-y-3">
+                                <div>
+                                    <h3 class="font-extrabold text-base text-slate-900 dark:text-white" x-text="selectedPoi.name[lang]"></h3>
+                                    <p class="text-[11px] font-semibold text-brand-600 mt-0.5 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i><span x-text="(lang === 'ru' ? 'Корпус ' : 'Bldg ') + selectedPoi.building + ', ' + t.floorLabel + ' ' + selectedPoi.floor"></span></p>
+                                    <p class="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed" x-show="selectedPoi.description" x-text="selectedPoi.description ? selectedPoi.description[lang] : ''"></p>
+                                </div>
+                                <div class="space-y-2 text-xs border-t border-b border-slate-100 dark:border-slate-800 py-3">
+                                    <div class="flex justify-between gap-2"><span class="text-slate-500 flex items-center gap-1.5"><i data-lucide="users" class="w-3.5 h-3.5"></i><span x-text="t.capacity"></span></span><span class="font-bold text-right" x-text="selectedPoi.capacity"></span></div>
+                                    <div class="flex justify-between gap-2"><span class="text-slate-500 flex items-center gap-1.5 shrink-0"><i data-lucide="wifi" class="w-3.5 h-3.5"></i><span x-text="t.wifi"></span></span><span class="font-bold text-right" x-text="selectedPoi.wifi"></span></div>
+                                    <div class="flex justify-between gap-2"><span class="text-slate-500 flex items-center gap-1.5"><i data-lucide="activity" class="w-3.5 h-3.5"></i>Статус</span>
+                                        <span class="font-bold flex items-center gap-1" :class="selectedPoi.status === 'busy' ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'"><span class="w-2 h-2 rounded-full" :class="selectedPoi.status === 'busy' ? 'bg-rose-500' : 'bg-emerald-500'"></span><span x-text="selectedPoi.statusText ? selectedPoi.statusText[lang] : ''"></span></span>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1.5 pt-1">
+                                        <template x-for="tag in equipmentTags(selectedPoi)" :key="tag"><span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-bold" x-text="tag"></span></template>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button @click="setRouteEndpointFromSelected('from')" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 font-bold py-2 rounded-xl text-xs" x-text="t.routeFromHere"></button>
+                                    <button @click="setRouteEndpointFromSelected('to')" class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1"><i data-lucide="navigation" class="w-3.5 h-3.5"></i><span x-text="t.routeHere"></span></button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </aside>
+
+            <!-- Map area -->
+            <div :class="mobileMapTab === 'plan' ? 'flex' : 'hidden lg:flex'" class="flex-1 flex-col p-3 sm:p-5 gap-3 min-w-0">
+                <!-- Building / floor / campus switch -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1 overflow-x-auto custom-scrollbar max-w-full">
+                        <button x-show="currentSpace.campus" @click="switchBuilding('CAMPUS')" :class="mapLayerMode === 'campus' ? 'bg-white dark:bg-slate-700 text-emerald-600 font-bold shadow-sm' : 'text-slate-600 dark:text-slate-300'" class="px-3 py-1.5 rounded-lg text-xs whitespace-nowrap flex items-center gap-1"><i data-lucide="trees" class="w-3.5 h-3.5"></i><span x-text="t.campusLabel"></span></button>
+                        <template x-for="(b, bId) in (currentSpace.buildings || {})" :key="bId">
+                            <button @click="switchBuilding(bId)" :class="mapLayerMode === 'floor' && activeBuilding === bId ? 'bg-white dark:bg-slate-700 text-brand-600 font-bold shadow-sm' : 'text-slate-600 dark:text-slate-300'" class="px-3 py-1.5 rounded-lg text-xs whitespace-nowrap" x-text="b.name[lang]"></button>
+                        </template>
+                    </div>
+                    <div x-show="mapLayerMode === 'floor'" class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1">
+                        <template x-for="fl in currentBuildingObj.floors" :key="'fl' + fl">
+                            <button @click="switchFloor(fl)" :class="Number(activeFloor) === Number(fl) ? 'bg-brand-600 text-white font-bold' : 'text-slate-600 dark:text-slate-300'" class="min-w-[34px] px-2 py-1.5 rounded-lg text-xs" x-text="fl"></button>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Categories -->
+                <div class="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar text-xs">
+                    <template x-for="cat in [['all', t.catAll], ['entrance', t.catEntrance], ['meeting', t.catMeeting], ['stand', t.catStand], ['service', t.catService], ['wifi', t.catWifi], ['vertical', t.catVertical]]" :key="cat[0]">
+                        <button @click="selectedCategory = cat[0]" :class="selectedCategory === cat[0] ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'" class="px-3 py-1.5 rounded-xl whitespace-nowrap flex items-center gap-1.5">
+                            <span x-show="cat[0] !== 'all'" class="w-2 h-2 rounded-full" :style="'background:' + categoryColor(cat[0])"></span><span x-text="cat[1]"></span>
+                        </button>
+                    </template>
+                </div>
+
+                <!-- Map card -->
+                <div class="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col flex-1 min-h-[440px] sm:min-h-[520px]">
+                    <div class="border-b border-slate-200 dark:border-slate-800 px-3 sm:px-5 py-2.5 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-xs bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full font-bold truncate" x-text="mapLayerMode === 'campus' ? t.campusLabel : (currentBuildingObj.name[lang] + ' • ' + t.floorLabel + ' ' + activeFloor)"></span>
+                            <span x-show="pickingRoutePoint" class="text-[10px] font-bold text-brand-600 animate-pulse whitespace-nowrap" x-text="lang === 'ru' ? 'Выберите точку…' : 'Pick a point…'"></span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <div class="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 mr-1">
+                                <button @click="mapRenderMode = '2d'" :class="mapRenderMode === '2d' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500'" class="px-2 py-1 rounded-md text-[11px] font-black">2D</button>
+                                <button @click="mapRenderMode = '3d'" :class="mapRenderMode === '3d' ? 'bg-white dark:bg-slate-700 text-brand-600 shadow-sm' : 'text-slate-500'" class="px-2 py-1 rounded-md text-[11px] font-black">3D</button>
+                            </div>
+                            <button @click="zoomInMap()" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+                            <button @click="zoomOutMap()" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+                            <button @click="resetMapZoom()" class="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200"><i data-lucide="maximize-2" class="w-4 h-4"></i></button>
+                            <button @click="shareModalOpen = true; refreshIcons()" class="hidden sm:block p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200" :title="t.shareBtn"><i data-lucide="share-2" class="w-4 h-4"></i></button>
+                            <button @click="downloadCurrentSpaceOffline()" class="hidden sm:block p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200" :title="t.downloadOfflineBtn"><i data-lucide="download" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 relative overflow-hidden bg-slate-50 dark:bg-slate-950/60 flex items-center justify-center map-3d-stage select-none"
+                         style="touch-action: none;"
+                         @mousedown="startMapPan($event)" @mousemove.window="onMapPan($event)" @mouseup.window="stopMapPan()"
+                         @touchstart.passive="startMapPan($event)" @touchmove="onMapPan($event)" @touchend="stopMapPan()"
+                         @wheel.prevent="$event.deltaY < 0 ? zoomInMap() : zoomOutMap()">
+                        <div class="map-3d-plane w-full max-w-[900px] px-2" :style="mapTransformStyle">
+                            <svg viewBox="0 0 720 420" class="w-full h-auto rounded-2xl border-2 border-slate-300 dark:border-slate-700 shadow-lg" :class="mapRenderMode === '3d' ? 'shadow-[0_40px_60px_-20px_rgba(15,23,42,0.55)]' : ''" x-html="mapSvgMarkup" @click="onMapSvgClick($event)"></svg>
+                        </div>
+
+                        <!-- Legend -->
+                        <div class="absolute bottom-3 left-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur rounded-xl px-3 py-2 text-[10px] font-bold flex flex-wrap gap-x-3 gap-y-1 max-w-[70%] shadow">
+                            <span class="flex items-center gap-1"><span class="w-3 h-1 bg-brand-600 rounded"></span><span x-text="lang === 'ru' ? 'Маршрут' : 'Route'"></span></span>
+                            <span class="flex items-center gap-1"><span class="w-3 h-2 rounded-sm border-2 border-sky-400 bg-slate-900"></span>360°</span>
+                            <span class="flex items-center gap-1"><span class="w-3 h-1 bg-sky-500 rounded"></span><span x-text="lang === 'ru' ? 'Окна' : 'Windows'"></span></span>
+                            <span class="flex items-center gap-1"><span class="w-3 h-0.5 border-t-2 border-dashed border-emerald-500"></span><span x-text="lang === 'ru' ? 'Проходы' : 'Doors'"></span></span>
+                        </div>
+                        <div x-show="mapRenderMode === '3d'" class="absolute top-3 right-3 bg-black/70 text-white text-[10px] font-bold rounded-lg px-2 py-1" x-text="lang === 'ru' ? 'Тяните, чтобы вращать' : 'Drag to rotate'"></div>
+                    </div>
+                </div>
+                <a x-show="isEmbedMode" :href="shareUrl" target="_blank" class="text-center text-xs font-bold text-brand-600">Открыть полную версию карты ТТК →</a>
+            </div>
+        </section>
+
+        <!-- ============ VIEW 3: AUTH ============ -->
+        <section x-show="currentView === 'auth'" x-cloak class="flex-1 p-4 sm:p-8 flex items-center justify-center min-h-[520px]">
+            <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6">
+                <div class="text-center space-y-2">
+                    <h2 class="text-2xl font-bold" x-text="t.authTitle"></h2>
+                    <p class="text-xs text-slate-500">Посетители сохраняют избранное, организаторы создают и публикуют карты</p>
+                </div>
+                <div class="flex border-b border-slate-200 dark:border-slate-800">
+                    <button @click="authTab = 'login'" :class="authTab === 'login' ? 'border-b-2 border-brand-600 text-brand-600 font-bold' : 'text-slate-500'" class="flex-1 pb-3 text-sm" x-text="t.loginTab"></button>
+                    <button @click="authTab = 'register'" :class="authTab === 'register' ? 'border-b-2 border-brand-600 text-brand-600 font-bold' : 'text-slate-500'" class="flex-1 pb-3 text-sm" x-text="t.registerTab"></button>
+                </div>
+                <form x-show="authTab === 'login'" class="space-y-4" @submit.prevent="loginUser()">
+                    <div><label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Email</label><input type="email" x-model="authForm.email" autocomplete="email" placeholder="alexey@ttk.ru" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Пароль</label><input type="password" x-model="authForm.password" autocomplete="current-password" placeholder="••••••••" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm"></div>
+                    <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition shadow-md" x-text="t.loginBtn"></button>
+                    <div class="text-[11px] text-slate-500 bg-slate-50 dark:bg-slate-800 rounded-xl p-3 space-y-0.5">
+                        <div>Демо-организатор: <b>admin@ttk.ru</b> / <b>admin2026</b></div>
+                        <div>Демо-посетитель: <b>alexey@ttk.ru</b> / <b>ttk2026</b></div>
+                    </div>
+                </form>
+                <form x-show="authTab === 'register'" class="space-y-4" @submit.prevent="registerUser()">
+                    <div><label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Имя и фамилия</label><input type="text" x-model="authForm.name" placeholder="Алексей Шереметьев" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Email</label><input type="email" x-model="authForm.email" placeholder="you@company.ru" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Пароль</label><input type="password" x-model="authForm.password" autocomplete="new-password" placeholder="Минимум 4 символа" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm"></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" @click="authForm.role = 'visitor'" :class="authForm.role === 'visitor' ? 'ring-2 ring-brand-600 bg-brand-50 dark:bg-brand-900/20' : 'bg-slate-50 dark:bg-slate-800'" class="p-3 rounded-xl text-left text-xs"><div class="font-bold">Посетитель</div><div class="text-slate-500">Смотрю карты</div></button>
+                        <button type="button" @click="authForm.role = 'organizer'" :class="authForm.role === 'organizer' ? 'ring-2 ring-brand-600 bg-brand-50 dark:bg-brand-900/20' : 'bg-slate-50 dark:bg-slate-800'" class="p-3 rounded-xl text-left text-xs"><div class="font-bold">Организатор</div><div class="text-slate-500">Создаю карты</div></button>
+                    </div>
+                    <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition shadow-md" x-text="t.registerBtn"></button>
+                </form>
+            </div>
+        </section>
+
+        <!-- ============ VIEW 4: CABINET ============ -->
+        <section x-show="currentView === 'cabinet'" x-cloak class="p-4 sm:p-8">
+            <div class="max-w-6xl mx-auto space-y-8">
+                <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <div class="flex items-center gap-5">
+                        <div class="w-16 h-16 rounded-2xl bg-brand-100 dark:bg-brand-900/30 text-brand-600 flex items-center justify-center font-black text-2xl" x-text="user ? user.name.split(' ').map(s => s[0]).join('').slice(0, 2) : 'ГС'"></div>
+                        <div>
+                            <h1 class="text-2xl font-bold" x-text="user ? user.name : (lang === 'ru' ? 'Гость' : 'Guest')"></h1>
+                            <p class="text-sm text-slate-500" x-text="user ? (user.email + ' • ' + user.roleLabel) : (lang === 'ru' ? 'Войдите, чтобы синхронизировать избранное' : 'Sign in to sync favorites')"></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button x-show="user && user.isAdmin" @click="attemptAdminAccess()" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4 text-brand-500"></i><span x-text="t.adminLinkTitle"></span></button>
+                        <button x-show="!user" @click="currentView = 'auth'" class="bg-brand-600 text-white px-5 py-3 rounded-xl text-sm font-bold" x-text="t.navLogin"></button>
+                        <button x-show="user" @click="logoutUser()" class="text-sm text-rose-500 hover:underline font-bold px-3 py-2">Выйти</button>
+                    </div>
+                </div>
+
+                <h2 class="text-xl font-black border-b border-slate-200 dark:border-slate-800 pb-2">Избранные пространства и точки</h2>
+                <div x-show="favoriteItemsList.length === 0" class="text-sm text-slate-500 text-center py-10">Пока пусто — нажмите ♥ на карточке площадки или точки.</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <template x-for="item in favoriteItemsList" :key="item.type + item.id">
+                        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-sm group">
+                            <div class="h-44 rounded-2xl overflow-hidden relative">
+                                <img :src="item.image" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" loading="lazy">
+                                <span class="absolute top-3 left-3 text-[10px] font-bold uppercase bg-black/70 text-white px-2 py-1 rounded-lg" x-text="item.type === 'space' ? (lang === 'ru' ? 'Площадка' : 'Venue') : (lang === 'ru' ? 'Точка' : 'Place')"></span>
+                                <button @click="toggleFavorite(item.id, $event)" class="absolute top-3 right-3 p-2 rounded-full bg-white/90 dark:bg-slate-800/90 text-rose-500 shadow-md hover:scale-110 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-lg" x-text="item.name[lang]"></h3>
+                                <p class="text-xs text-slate-500 mt-1 line-clamp-2" x-text="item.desc ? item.desc[lang] : ''"></p>
+                            </div>
+                            <button @click="openFavoriteItem(item)" class="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">Перейти на карту <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ VIEW 5: ORGANIZER STUDIO ============ -->
+        <section x-show="currentView === 'admin'" x-cloak class="p-3 sm:p-6 lg:p-8">
+            <div class="max-w-7xl mx-auto space-y-5">
+                <!-- Studio header -->
+                <div class="bg-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 text-[11px] font-bold text-brand-500 uppercase tracking-wider"><i data-lucide="shield-check" class="w-3.5 h-3.5"></i><span x-text="user ? user.roleLabel : ''"></span></div>
+                        <h1 class="text-xl sm:text-2xl font-black" x-text="t.editorTitle"></h1>
+                        <div class="flex flex-wrap items-center gap-2 mt-2">
+                            <select x-model="currentSpaceKey" @change="syncSelectionAfterSpaceChange(); editorSelectedType = ''" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold max-w-[240px]">
+                                <template x-for="k in spaceList" :key="'adm' + k"><option :value="k" :selected="k === currentSpaceKey" x-text="spacesData[k].name.ru"></option></template>
+                            </select>
+                            <button @click="newSpaceModalOpen = true; refreshIcons()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Новая площадка</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span x-show="unsavedChanges" class="text-[11px] font-bold text-amber-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>Есть несохранённые изменения</span>
+                        <button @click="shareModalOpen = true; refreshIcons()" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"><i data-lucide="share-2" class="w-4 h-4"></i><span x-text="t.shareBtn"></span></button>
+                        <button @click="selectSpaceAndOpenMap(currentSpaceKey)" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"><i data-lucide="eye" class="w-4 h-4"></i>Как видит посетитель</button>
+                        <button @click="saveCurrentSpaceChanges()" :disabled="isSavingMap" class="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5"><i data-lucide="save" class="w-4 h-4"></i><span x-text="isSavingMap ? 'Сохранение…' : 'Сохранить и опубликовать'"></span></button>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
+                    <button @click="adminTab = 'editor'" :class="adminTab === 'editor' ? 'border-b-2 border-brand-600 text-brand-600 font-bold' : 'text-slate-500'" class="pb-3 px-4 text-sm whitespace-nowrap flex items-center gap-1.5"><i data-lucide="pen-tool" class="w-4 h-4"></i>Редактор 2D-плана</button>
+                    <button @click="adminTab = 'panoramas'" :class="adminTab === 'panoramas' ? 'border-b-2 border-brand-600 text-brand-600 font-bold' : 'text-slate-500'" class="pb-3 px-4 text-sm whitespace-nowrap flex items-center gap-1.5"><i data-lucide="rotate-3d" class="w-4 h-4"></i>Панорамы 360°</button>
+                    <button @click="adminTab = 'analytics'" :class="adminTab === 'analytics' ? 'border-b-2 border-brand-600 text-brand-600 font-bold' : 'text-slate-500'" class="pb-3 px-4 text-sm whitespace-nowrap flex items-center gap-1.5"><i data-lucide="bar-chart-3" class="w-4 h-4"></i><span x-text="t.analyticsTitle"></span></button>
+                </div>
+
+                <!-- ---- Editor tab ---- -->
+                <div x-show="adminTab === 'editor'" class="grid grid-cols-1 xl:grid-cols-[260px_1fr_300px] gap-5">
+                    <!-- Left: tools -->
+                    <div class="space-y-4">
+                        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-sm">
+                            <h3 class="font-bold text-sm">1. Инструменты разметки</h3>
+                            <div class="grid grid-cols-4 xl:grid-cols-2 gap-2">
+                                <template x-for="tool in [['select','mouse-pointer-2','Выбор'],['wall','minus','Стены'],['zone','square','Комнаты'],['door','door-open','Проходы'],['window','app-window','Окна'],['poi','map-pin','Точки'],['nav','git-branch','Коридоры'],['ruler','ruler','Линейка']]" :key="tool[0]">
+                                    <button @click="setMarkupTool(tool[0])" :class="activeMarkupTool === tool[0] ? 'bg-brand-600 text-white border-brand-600' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'" class="p-2.5 rounded-2xl border text-[11px] font-bold flex flex-col xl:flex-row items-center justify-center gap-1.5 transition">
+                                        <i :data-lucide="tool[1]" class="w-4 h-4"></i><span x-text="tool[2]"></span>
+                                    </button>
+                                </template>
+                            </div>
+                            <p class="text-[11px] text-slate-500 leading-snug" x-text="{select:'Нажмите на объект, чтобы изменить его; точки можно перетаскивать.', wall:'Зажмите и протяните линию стены (привязка к сетке 10 px).', zone:'Протяните прямоугольник помещения или зоны.', door:'Нажмите на стену — появится проход и узел маршрута.', window:'Протяните линию окна по внешней стене.', poi:'Нажмите на план, чтобы поставить стенд, зал, вход или Wi-Fi.', nav:'Кликайте по коридору последовательно — узлы соединятся в граф маршрутов.', ruler:'Протяните линию, чтобы измерить расстояние в метрах.'}[activeMarkupTool]"></p>
+                        </div>
+
+                        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-sm">
+                            <h3 class="font-bold text-sm">2. Корпуса и этажи</h3>
+                            <div class="flex flex-wrap gap-1.5">
+                                <template x-for="(b, bId) in (currentSpace.buildings || {})" :key="'eb' + bId">
+                                    <button @click="activeBuilding = bId; activeFloor = b.floors[0]; editorSelectedType = ''" :class="activeBuilding === bId ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800'" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold" x-text="b.name.ru"></button>
+                                </template>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5">
+                                <template x-for="fl in currentBuildingObj.floors" :key="'ef' + fl">
+                                    <button @click="activeFloor = fl; editorSelectedType = ''" :class="Number(activeFloor) === Number(fl) ? 'bg-brand-600 text-white' : 'bg-slate-100 dark:bg-slate-800'" class="min-w-[34px] px-2 py-1.5 rounded-lg text-[11px] font-bold" x-text="fl + ' эт.'"></button>
+                                </template>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button @click="addNewFloorToCurrentBuilding()" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1"><i data-lucide="layers" class="w-3.5 h-3.5"></i>+ Этаж</button>
+                                <button @click="addNewBuildingToCurrentSpace()" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1"><i data-lucide="building-2" class="w-3.5 h-3.5"></i>+ Корпус</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 space-y-2.5 shadow-sm">
+                            <h3 class="font-bold text-sm">3. Готовый план и ИИ</h3>
+                            <input type="file" accept="image/*" class="hidden" x-ref="planBgInput" @change="uploadFloorplanBackground($event)">
+                            <input type="file" accept="image/*" class="hidden" x-ref="aiFileInput" @change="generate2DBlueprint($event)">
+                            <button @click="$refs.planBgInput.click()" class="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2.5 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5"><i data-lucide="image-up" class="w-3.5 h-3.5"></i>Загрузить план подложкой</button>
+                            <button @click="$refs.aiFileInput.click()" :disabled="isGeneratingMap" class="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5"><i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-500"></i><span x-text="isGeneratingMap ? 'Распознаю…' : 'Авто-план по изображению (ИИ)'"></span></button>
+                            <button @click="runDemoAiBlueprint()" class="w-full text-[11px] font-bold text-brand-600 hover:underline">Попробовать на демо-чертеже</button>
+                            <div x-show="currentFloorPlan.backgroundUrl" class="space-y-1">
+                                <label class="text-[11px] text-slate-500">Прозрачность подложки</label>
+                                <input type="range" min="0" max="1" step="0.05" x-model.number="currentFloorPlan.backgroundOpacity" @input="unsavedChanges = true" class="w-full accent-brand-600">
+                                <button @click="currentFloorPlan.backgroundUrl = ''; unsavedChanges = true" class="text-[11px] text-rose-500 font-bold">Убрать подложку</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 space-y-2.5 shadow-sm">
+                            <h3 class="font-bold text-sm">4. Публикация и доступ</h3>
+                            <label class="flex items-center justify-between text-xs font-semibold"><span>Карта опубликована</span><input type="checkbox" x-model="currentSpace.published" @change="unsavedChanges = true" class="w-4 h-4 accent-brand-600"></label>
+                            <div>
+                                <label class="text-[11px] text-slate-500">PIN-код для посетителей (необязательно)</label>
+                                <input type="text" x-model="currentSpace.accessPin" @input="unsavedChanges = true" placeholder="Без PIN — открытый доступ" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs mt-1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Center: canvas -->
+                    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 shadow-sm space-y-3 min-w-0">
+                        <div class="flex items-center justify-between gap-2 text-xs">
+                            <span class="font-bold truncate" x-text="currentBuildingObj.name.ru + ' • Этаж ' + activeFloor"></span>
+                            <span class="text-slate-500 whitespace-nowrap" x-text="(currentFloorPlan.rooms || []).length + ' помещ. • ' + (currentFloorPlan.walls || []).length + ' стен • ' + currentFloorPoisCount + ' точек'"></span>
+                        </div>
+                        <svg viewBox="0 0 720 420" class="w-full h-auto rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 select-none" :class="activeMarkupTool === 'select' ? 'cursor-default' : 'editor-canvas-crosshair'" style="touch-action: none;"
+                             x-html="editorSvgMarkup"
+                             @mousedown.prevent="onEditorCanvasDown($event)" @mousemove="onEditorCanvasMove($event)" @mouseup="onEditorCanvasUp()" @mouseleave="onEditorCanvasUp()"
+                             @touchstart.prevent="onEditorCanvasDown($event)" @touchmove.prevent="onEditorCanvasMove($event)" @touchend="onEditorCanvasUp()"></svg>
+                        <div class="flex flex-wrap gap-3 text-[10px] font-bold text-slate-500">
+                            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>Узел коридора</span>
+                            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>Лифт / лестница</span>
+                            <span class="flex items-center gap-1"><span class="w-3 border-t-2 border-dashed border-slate-400"></span>Граф маршрутов</span>
+                            <span x-show="rulerMeasurement" class="text-amber-500" x-text="rulerMeasurement ? ('Линейка: ' + rulerMeasurement.meters + ' м') : ''"></span>
+                        </div>
+                    </div>
+
+                    <!-- Right: properties -->
+                    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3 h-fit">
+                        <h3 class="font-bold text-sm flex items-center gap-2"><i data-lucide="sliders-horizontal" class="w-4 h-4 text-brand-600"></i>Свойства объекта</h3>
+                        <p x-show="!editorSelectedType" class="text-xs text-slate-500">Выберите инструмент «Выбор» и нажмите на точку, помещение, стену или проход.</p>
+
+                        <!-- POI properties -->
+                        <template x-if="editorSelectedPoi">
+                            <div class="space-y-2.5 text-xs">
+                                <div><label class="text-[11px] text-slate-500">Название (RU)</label><input x-model="editorSelectedPoi.name.ru" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5"></div>
+                                <div><label class="text-[11px] text-slate-500">Название (EN)</label><input x-model="editorSelectedPoi.name.en" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5"></div>
+                                <div><label class="text-[11px] text-slate-500">Категория</label>
+                                    <select x-model="editorSelectedPoi.category" @change="updatePoiCategoryLabel(editorSelectedPoi)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5">
+                                        <option value="entrance">Вход / Ресепшн</option><option value="meeting">Зал / Переговорная</option><option value="stand">Стенд</option><option value="service">Стойка обслуживания</option><option value="wifi">Точка Wi-Fi</option><option value="vertical">Лифт / Лестница</option>
+                                    </select>
+                                </div>
+                                <div x-show="editorSelectedPoi.description"><label class="text-[11px] text-slate-500">Описание</label><textarea x-model="editorSelectedPoi.description.ru" @input="editorSelectedPoi.description.en = editorSelectedPoi.description.en || ''; unsavedChanges = true" rows="3" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5"></textarea></div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div><label class="text-[11px] text-slate-500">Вместимость</label><input x-model="editorSelectedPoi.capacity" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 mt-0.5"></div>
+                                    <div><label class="text-[11px] text-slate-500">Wi-Fi</label><input x-model="editorSelectedPoi.wifi" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 mt-0.5"></div>
+                                </div>
+                                <div><label class="text-[11px] text-slate-500">Оборудование (через запятую)</label><input x-model="editorSelectedPoi.equipment" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5"></div>
+                                <div><label class="text-[11px] text-slate-500">Фото (URL)</label><input x-model="editorSelectedPoi.image" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5"></div>
+                                <div><label class="text-[11px] text-slate-500">Привязанная панорама</label>
+                                    <select x-model="editorSelectedPoi.panoId" @change="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5">
+                                        <option value="">— нет —</option>
+                                        <template x-for="(pano, pid) in (currentSpace.panoramas || {})" :key="'pp' + pid"><option :value="pid" :selected="pid === editorSelectedPoi.panoId" x-text="pano.title.ru"></option></template>
+                                    </select>
+                                </div>
+                                <div class="text-[10px] text-slate-400" x-text="'Координаты: ' + editorSelectedPoi.x + ', ' + editorSelectedPoi.y + ' • ID ' + editorSelectedPoi.id"></div>
+                                <div class="grid grid-cols-2 gap-2 pt-1">
+                                    <button @click="openCaptureWizard(editorSelectedPoi.id)" class="bg-slate-900 text-white py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1"><i data-lucide="camera" class="w-3.5 h-3.5"></i>Снять 360°</button>
+                                    <button @click="$refs.poiPanoUpload.click()" class="bg-slate-100 dark:bg-slate-800 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1"><i data-lucide="upload" class="w-3.5 h-3.5"></i>Загрузить 360°</button>
+                                    <button @click="$refs.room3dUpload.click()" class="bg-slate-100 dark:bg-slate-800 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1"><i data-lucide="box" class="w-3.5 h-3.5"></i>3D по фото</button>
+                                    <button @click="openPanorama(editorSelectedPoi)" class="bg-slate-100 dark:bg-slate-800 py-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1"><i data-lucide="eye" class="w-3.5 h-3.5"></i>Просмотр</button>
+                                </div>
+                                <input type="file" accept="image/*" class="hidden" x-ref="poiPanoUpload" @change="uploadReadyPanoramaFile($event, editorSelectedPoi.id)">
+                                <input type="file" accept="image/*" multiple class="hidden" x-ref="room3dUpload" @change="uploadPhotosForRoom3D($event)">
+                            </div>
+                        </template>
+
+                        <!-- Room properties -->
+                        <template x-if="editorSelectedRoom">
+                            <div class="space-y-2.5 text-xs">
+                                <div><label class="text-[11px] text-slate-500">Название помещения (RU)</label><input x-model="editorSelectedRoom.label.ru" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5"></div>
+                                <div><label class="text-[11px] text-slate-500">Название (EN)</label><input x-model="editorSelectedRoom.label.en" @input="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5"></div>
+                                <div><label class="text-[11px] text-slate-500">Тип</label>
+                                    <select x-model="editorSelectedRoom.type" @change="unsavedChanges = true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 mt-0.5">
+                                        <option value="hall">Зал / Офис</option><option value="corridor">Коридор</option><option value="meeting">Переговорная / Конференц-зал</option><option value="stand">Стенд / Экспозиция</option><option value="entrance">Вход</option><option value="vertical">Лифт / Лестница</option><option value="tech">Техническое</option><option value="service">Сервис / Кафе</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div x-show="editorSelectedType === 'wall' || editorSelectedType === 'door'" class="text-xs text-slate-500" x-text="editorSelectedType === 'wall' ? 'Выбрана стена' : 'Выбран проход'"></div>
+                        <button x-show="editorSelectedType" @click="deleteSelectedEditorObject()" class="w-full bg-rose-50 dark:bg-rose-900/20 text-rose-600 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i>Удалить объект</button>
+                    </div>
+                </div>
+
+                <!-- ---- Panoramas tab ---- -->
+                <div x-show="adminTab === 'panoramas'" class="space-y-5">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <button @click="openCaptureWizard()" class="text-left bg-slate-900 text-white rounded-3xl p-5 hover:bg-slate-800 transition">
+                            <i data-lucide="smartphone" class="w-7 h-7 text-brand-500 mb-3"></i>
+                            <div class="font-black">Снять панораму телефоном</div>
+                            <div class="text-xs text-slate-400 mt-1">Мастер подскажет порядок съёмки 8 кадров, сервис сам сошьёт их в 360°</div>
+                        </button>
+                        <button @click="$refs.panoUploadGeneral.click()" class="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 hover:shadow-lg transition">
+                            <i data-lucide="upload-cloud" class="w-7 h-7 text-sky-500 mb-3"></i>
+                            <div class="font-black">Загрузить готовую панораму</div>
+                            <div class="text-xs text-slate-500 mt-1">Equirectangular JPG/PNG с камеры 360° или телефона</div>
+                        </button>
+                        <input type="file" accept="image/*" class="hidden" x-ref="panoUploadGeneral" @change="uploadReadyPanoramaFile($event)">
+                        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5">
+                            <i data-lucide="mouse-pointer-click" class="w-7 h-7 text-emerald-500 mb-3"></i>
+                            <div class="font-black">Точки на панорамах</div>
+                            <div class="text-xs text-slate-500 mt-1">Откройте панораму и нажмите «+ Точка», чтобы добавить описание или переход в другую панораму</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        <template x-for="(pano, pid) in (currentSpace.panoramas || {})" :key="'pl' + pid">
+                            <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                                <div class="h-36 bg-slate-900 bg-cover bg-center relative" :style="'background-image:url(&quot;' + (pano.imageUrl || pano.photoUrl) + '&quot;)'">
+                                    <span class="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded-lg" x-text="(pano.building === 'CAMPUS' ? 'Территория' : ('Корпус ' + pano.building + ' • ' + pano.floor + ' эт.'))"></span>
+                                </div>
+                                <div class="p-4 space-y-2">
+                                    <h4 class="font-bold text-sm leading-tight" x-text="pano.title.ru"></h4>
+                                    <div class="flex gap-2 text-[10px] font-bold text-slate-500">
+                                        <span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800" x-text="(pano.hotspots || []).filter(h => h.type === 'info').length + ' инфо-точек'"></span>
+                                        <span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800" x-text="(pano.hotspots || []).filter(h => h.type === 'nav').length + ' переходов'"></span>
+                                    </div>
+                                    <button @click="openPanoramaById(pid)" class="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="rotate-3d" class="w-3.5 h-3.5"></i>Открыть и редактировать точки</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- ---- Analytics tab ---- -->
+                <div x-show="adminTab === 'analytics'" class="space-y-5">
+                    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="text-xl sm:text-2xl font-black text-white" x-text="t.analyticsTitle"></h2>
+                            <p class="text-xs sm:text-sm text-slate-400 mt-1" x-text="t.analyticsSub"></p>
+                        </div>
+                        <select x-model="analyticsFilterSpace" @change="loadAnalytics()" class="bg-slate-800 text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-700">
+                            <option value="all">Все площадки</option>
+                            <template x-for="k in spaceList" :key="'an' + k"><option :value="k" x-text="spacesData[k].name.ru"></option></template>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <template x-for="card in [['Просмотров карты', analyticsData.totals.mapViews, 'map'], ['Построено маршрутов', analyticsData.totals.routesBuilt, 'route'], ['Просмотров 360°', analyticsData.totals.panoViews, 'rotate-3d'], ['Офлайн-сессий', analyticsData.totals.offlineSessions, 'wifi-off']]" :key="card[0]">
+                            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 space-y-2 shadow-sm">
+                                <div class="flex items-center justify-between"><p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider" x-text="card[0]"></p><i :data-lucide="card[2]" class="w-4 h-4 text-brand-600"></i></div>
+                                <div class="text-2xl sm:text-3xl font-black" x-text="Number(card[1] || 0).toLocaleString('ru-RU')"></div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                        <div class="lg:col-span-2 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 bg-white dark:bg-slate-900">
+                            <h4 class="font-bold text-sm mb-4">Активность посетителей по часам</h4>
+                            <div class="h-64"><canvas id="analyticsChart"></canvas></div>
+                        </div>
+                        <div class="border border-slate-200 dark:border-slate-800 rounded-3xl p-5 bg-white dark:bg-slate-900">
+                            <h4 class="font-bold text-sm mb-4">Популярные места</h4>
+                            <div x-show="!analyticsData.topPois || !analyticsData.topPois.length" class="text-xs text-slate-500">Данные появятся после первых просмотров.</div>
+                            <ol class="space-y-3">
+                                <template x-for="(item, idx) in (analyticsData.topPois || [])" :key="item.spaceId + item.poiId">
+                                    <li class="flex items-center gap-3">
+                                        <span class="w-7 h-7 rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-600 text-xs font-black flex items-center justify-center" x-text="idx + 1"></span>
+                                        <div class="flex-1 min-w-0"><div class="text-xs font-bold truncate" x-text="item.poiName.ru"></div><div class="text-[10px] text-slate-500 truncate" x-text="item.spaceName.ru"></div></div>
+                                        <span class="text-xs font-black" x-text="item.views"></span>
+                                    </li>
+                                </template>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ======================= MOBILE BOTTOM NAV ======================= -->
+    <nav x-show="!isEmbedMode" class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 grid grid-cols-4 pb-safe">
+        <button @click="currentView = 'spaces'" :class="currentView === 'spaces' ? 'text-brand-600' : 'text-slate-500'" class="py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-bold"><i data-lucide="building-2" class="w-5 h-5"></i><span x-text="t.navSpaces"></span></button>
+        <button @click="currentView = 'map'; refreshIcons()" :class="currentView === 'map' ? 'text-brand-600' : 'text-slate-500'" class="py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-bold"><i data-lucide="map" class="w-5 h-5"></i><span x-text="lang === 'ru' ? 'Карта' : 'Map'"></span></button>
+        <button @click="currentView = user ? 'cabinet' : 'auth'" :class="['cabinet','auth'].includes(currentView) ? 'text-brand-600' : 'text-slate-500'" class="py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-bold"><i data-lucide="user" class="w-5 h-5"></i><span x-text="t.navCabinet"></span></button>
+        <button @click="attemptAdminAccess()" :class="currentView === 'admin' ? 'text-brand-600' : 'text-slate-500'" class="py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-bold"><i data-lucide="pen-tool" class="w-5 h-5"></i><span x-text="lang === 'ru' ? 'Студия' : 'Studio'"></span></button>
+    </nav>
+
+    <!-- ======================= MODALS ======================= -->
+
+    <!-- Organizer access -->
+    <div x-show="adminPasswordModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" @keydown.escape.window="adminPasswordModalOpen = false">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-5 border border-slate-200 dark:border-slate-800" @click.outside="adminPasswordModalOpen = false">
+            <div class="flex items-center justify-between"><h3 class="text-lg font-bold" x-text="t.adminAuthPromptTitle"></h3><button @click="adminPasswordModalOpen = false" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            <p class="text-xs text-slate-500" x-text="t.adminAuthPromptDesc"></p>
+            <div>
+                <label class="block text-xs font-semibold mb-1" x-text="t.adminPasswordLabel"></label>
+                <input type="password" x-model="adminPasswordInput" @keydown.enter="verifyAdminPassword()" placeholder="••••••••" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm">
+            </div>
+            <button @click="verifyAdminPassword()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl shadow-md text-sm" x-text="t.adminLoginBtn"></button>
+            <button @click="adminPasswordModalOpen = false; authTab = 'login'; currentView = 'auth'" class="w-full text-xs font-bold text-slate-500 hover:text-brand-600">Войти по email организатора →</button>
+        </div>
+    </div>
+
+    <!-- Space PIN -->
+    <div x-show="pinModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-sm shadow-2xl p-6 space-y-4 border border-slate-200 dark:border-slate-800">
+            <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center"><i data-lucide="lock" class="w-6 h-6"></i></div>
+            <h3 class="text-lg font-bold">Карта защищена PIN-кодом</h3>
+            <p class="text-xs text-slate-500">Организатор ограничил доступ к этой площадке. Введите PIN, полученный от организатора.</p>
+            <input type="text" inputmode="numeric" x-model="pinInput" @keydown.enter="submitSpacePin()" placeholder="PIN" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-lg tracking-[0.4em] text-center font-black">
+            <div class="flex gap-2">
+                <button @click="pinModalOpen = false; currentView = 'spaces'" class="flex-1 bg-slate-100 dark:bg-slate-800 py-2.5 rounded-xl text-sm font-bold">Отмена</button>
+                <button @click="submitSpacePin()" class="flex-1 bg-brand-600 text-white py-2.5 rounded-xl text-sm font-bold">Открыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Photo search -->
+    <div x-show="photoSearchModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-5 border border-slate-200 dark:border-slate-800" @click.outside="photoSearchModalOpen = false">
+            <div class="flex items-center justify-between"><h3 class="text-xl font-bold">Найти место по фото</h3><button @click="photoSearchModalOpen = false" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            <input type="file" accept="image/*" capture="environment" class="hidden" x-ref="fileInput" @change="handlePhotoUpload($event)">
+            <div @click="$refs.fileInput.click()" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center cursor-pointer hover:border-brand-600 transition bg-slate-50 dark:bg-slate-950">
+                <i data-lucide="camera" class="w-10 h-10 mx-auto text-brand-600 mb-2"></i>
+                <p class="text-sm font-semibold">Сфотографируйте вывеску или помещение</p>
+                <p class="text-xs text-slate-500 mt-1">Мы определим место на карте и построим маршрут</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panorama 360 viewer -->
+    <div x-show="panoramaModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md sm:p-4" @keydown.escape.window="closePanoramaModal()">
+        <div class="bg-slate-900 sm:rounded-3xl w-full max-w-6xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col h-full sm:h-[min(720px,92vh)] relative">
+            <!-- Toolbar -->
+            <div class="p-3 sm:p-4 bg-slate-950/95 border-b border-slate-800 flex items-center justify-between gap-2 text-white z-10">
+                <div class="flex items-center gap-2 min-w-0">
+                    <i data-lucide="rotate-3d" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                    <div class="min-w-0">
+                        <h3 class="font-bold text-sm sm:text-base truncate" x-text="activePanorama ? activePanorama.title[lang] : t.panoBtn"></h3>
+                        <p class="text-[10px] text-slate-400" x-text="Math.round(panoYaw) + '° • ' + (lang === 'ru' ? 'тяните, чтобы осмотреться' : 'drag to look around')"></p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button @click="togglePanoSource()" class="hidden sm:block px-2.5 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-[11px] font-bold" x-text="panoUsePhoto ? '360° схема' : 'Фото'"></button>
+                    <button @click="togglePanoAutoRotate()" :class="panoAutoRotate ? 'bg-brand-600' : 'bg-slate-800 hover:bg-slate-700'" class="p-2 rounded-lg" title="Автоповорот"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+                    <button @click="panoZoom = Math.min(panoZoom + 15, 220)" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+                    <button @click="panoZoom = Math.max(panoZoom - 15, 75)" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+                    <button x-show="user && user.isAdmin" @click="panoAddHotspotMode = !panoAddHotspotMode" :class="panoAddHotspotMode ? 'bg-emerald-600' : 'bg-slate-800 hover:bg-slate-700'" class="px-2.5 py-2 rounded-lg text-[11px] font-bold flex items-center gap-1"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Точка</button>
+                    <button @click="closePanoramaModal()" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+                </div>
+            </div>
+
+            <!-- Viewport -->
+            <div x-ref="panoViewport" class="flex-1 relative pano-viewport pano-equirect bg-slate-800" :class="panoAddHotspotMode ? 'cursor-crosshair' : ''" :style="panoBackgroundStyle"
+                 @mousedown="startPanoDrag($event)" @mousemove.window="onPanoDrag($event)" @mouseup.window="stopPanoDrag()"
+                 @touchstart="startPanoDrag($event)" @touchmove.prevent="onPanoDrag($event)" @touchend="stopPanoDrag()"
+                 @wheel.prevent="panoZoom = Math.max(75, Math.min(220, panoZoom - $event.deltaY * 0.08))">
+
+                <!-- Hotspots -->
+                <template x-for="hs in projectedHotspots" :key="hs.id">
+                    <button x-show="hs.visible" @click.stop="handleHotspotClick(hs)" class="pano-hotspot-btn absolute -translate-x-1/2 -translate-y-1/2 group z-10" :style="'left:' + hs.leftPct + '%;top:' + hs.topPct + '%'">
+                        <span class="flex items-center gap-2 px-3 py-2 rounded-full shadow-xl border text-xs font-bold whitespace-nowrap backdrop-blur-md transition group-hover:scale-105"
+                              :class="hs.type === 'nav' ? 'bg-white/90 text-slate-900 border-white' : 'bg-brand-600/90 text-white border-brand-400'">
+                            <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black" :class="hs.type === 'nav' ? 'bg-slate-900 text-white' : 'bg-white text-brand-600'" x-text="hs.type === 'nav' ? '➜' : 'i'"></span>
+                            <span class="max-w-[220px] truncate" x-text="hs.label[lang] || hs.label.ru"></span>
+                        </span>
+                    </button>
+                </template>
+
+                <!-- Add hotspot hint -->
+                <div x-show="panoAddHotspotMode" class="pano-ui-overlay absolute top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg">Нажмите на панораму, чтобы поставить точку</div>
+
+                <!-- Hotspot info card -->
+                <div x-show="activeHotspotInfo" x-transition class="pano-ui-overlay absolute left-3 right-3 sm:left-auto sm:right-4 bottom-20 sm:bottom-4 sm:w-80 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-2xl shadow-2xl p-4 space-y-2 z-20" @mousedown.stop @touchstart.stop>
+                    <div class="flex items-start justify-between gap-2"><h4 class="font-black text-sm" x-text="activeHotspotInfo ? activeHotspotInfo.label : ''"></h4><button @click="activeHotspotInfo = null" class="p-1"><i data-lucide="x" class="w-4 h-4"></i></button></div>
+                    <p class="text-xs text-slate-600 dark:text-slate-300" x-text="activeHotspotInfo ? activeHotspotInfo.text : ''"></p>
+                    <template x-if="activeHotspotInfo && activeHotspotInfo.poi">
+                        <div class="flex gap-2 pt-1">
+                            <button @click="routeToHotspotPoi(activeHotspotInfo.poi)" class="flex-1 bg-brand-600 text-white py-2 rounded-xl text-xs font-bold" x-text="t.routeHere"></button>
+                            <button @click="selectedPoi = activeHotspotInfo.poi; closePanoramaModal(); currentView = 'map'" class="flex-1 bg-slate-100 dark:bg-slate-800 py-2 rounded-xl text-xs font-bold">На плане</button>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- New hotspot form (organizer) -->
+                <div x-show="newHotspotDraft.open" class="pano-ui-overlay absolute inset-x-3 top-3 sm:left-4 sm:right-auto sm:w-80 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-2xl shadow-2xl p-4 space-y-2 z-30 text-xs" @mousedown.stop @touchstart.stop>
+                    <h4 class="font-black text-sm" x-text="'Новая точка (' + newHotspotDraft.yaw + '°, ' + newHotspotDraft.pitch + '°)'"></h4>
+                    <div class="grid grid-cols-2 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                        <button @click="newHotspotDraft.type = 'info'" :class="newHotspotDraft.type === 'info' ? 'bg-white dark:bg-slate-700 shadow-sm font-bold' : ''" class="py-1.5 rounded-md">Информация</button>
+                        <button @click="newHotspotDraft.type = 'nav'" :class="newHotspotDraft.type === 'nav' ? 'bg-white dark:bg-slate-700 shadow-sm font-bold' : ''" class="py-1.5 rounded-md">Переход</button>
+                    </div>
+                    <input x-model="newHotspotDraft.labelRu" placeholder="Подпись точки" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                    <div x-show="newHotspotDraft.type === 'info'" class="space-y-2">
+                        <textarea x-model="newHotspotDraft.textRu" rows="2" placeholder="Описание" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2"></textarea>
+                        <select x-model="newHotspotDraft.poiId" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                            <option value="">Без привязки к точке</option>
+                            <template x-for="poi in (currentSpace.pois || [])" :key="'hp' + poi.id"><option :value="String(poi.id)" x-text="poi.name.ru"></option></template>
+                        </select>
+                    </div>
+                    <select x-show="newHotspotDraft.type === 'nav'" x-model="newHotspotDraft.targetPanoId" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                        <template x-for="(p, pid) in (currentSpace.panoramas || {})" :key="'hn' + pid"><option :value="pid" x-show="pid !== activePanoramaId" x-text="p.title.ru"></option></template>
+                    </select>
+                    <div class="flex gap-2"><button @click="newHotspotDraft.open = false" class="flex-1 bg-slate-100 dark:bg-slate-800 py-2 rounded-lg font-bold">Отмена</button><button @click="saveNewPanoramaHotspot()" class="flex-1 bg-brand-600 text-white py-2 rounded-lg font-bold">Сохранить</button></div>
+                </div>
+
+                <!-- Compass -->
+                <div class="pano-ui-overlay absolute top-3 right-3 w-12 h-12 rounded-full bg-black/60 border border-white/20 flex items-center justify-center">
+                    <div class="w-full h-full relative transition-transform" :style="'transform: rotate(' + (-panoYaw) + 'deg)'"><span class="absolute top-0.5 left-1/2 -translate-x-1/2 text-[10px] font-black text-brand-500">N</span></div>
+                </div>
+            </div>
+
+            <!-- Route walkthrough controls -->
+            <div x-show="panoTourActive && computedRoute" class="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-3 text-white">
+                <button @click="stepPanoramaTour(-1)" :disabled="panoTourIndex === 0" class="p-2.5 rounded-xl bg-slate-800 disabled:opacity-30"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                <div class="flex-1 min-w-0">
+                    <div class="text-[10px] font-bold text-brand-500 uppercase tracking-wider" x-text="(lang === 'ru' ? 'Проход маршрута • ' : 'Route walkthrough • ') + (panoTourIndex + 1) + ' / ' + (computedRoute ? computedRoute.panoramaTour.length : 0)"></div>
+                    <div class="flex gap-1 mt-1.5">
+                        <template x-for="(stop, i) in (computedRoute ? computedRoute.panoramaTour : [])" :key="'tour' + i">
+                            <div class="h-1.5 flex-1 rounded-full" :class="i <= panoTourIndex ? 'bg-brand-600' : 'bg-slate-700'"></div>
+                        </template>
+                    </div>
+                </div>
+                <button @click="stepPanoramaTour(1)" :disabled="!computedRoute || panoTourIndex >= computedRoute.panoramaTour.length - 1" class="px-4 py-2.5 rounded-xl bg-brand-600 disabled:opacity-30 text-xs font-bold flex items-center gap-1"><span x-text="lang === 'ru' ? 'Дальше' : 'Next'"></span><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Capture wizard -->
+    <div x-show="captureWizardOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md sm:p-4">
+        <div class="bg-white dark:bg-slate-900 sm:rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col h-full sm:h-auto sm:max-h-[94vh] overflow-y-auto custom-scrollbar">
+            <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-black flex items-center gap-2"><i data-lucide="smartphone" class="w-5 h-5 text-brand-600"></i>Мастер съёмки панорамы 360°</h3>
+                    <p class="text-xs text-slate-500">Встаньте в одну точку и поворачивайтесь на месте по часовой стрелке</p>
+                </div>
+                <button @click="closeCaptureWizard()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-[1fr_260px] gap-5">
+                <div class="space-y-3">
+                    <div class="relative aspect-[3/4] sm:aspect-video bg-slate-950 rounded-2xl overflow-hidden">
+                        <video x-ref="panoCameraVideo" x-show="cameraLiveActive" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover"></video>
+                        <div x-show="!cameraLiveActive" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 text-slate-300">
+                            <i data-lucide="camera" class="w-10 h-10 mb-3 text-slate-500"></i>
+                            <p class="text-sm font-bold">Камера не включена</p>
+                            <p class="text-xs text-slate-500 mt-1">Включите камеру телефона или снимите тестовую серию кадров</p>
+                        </div>
+                        <!-- Overlay guides -->
+                        <div class="absolute inset-0 pointer-events-none">
+                            <div class="absolute inset-y-0 left-1/3 border-l border-white/20"></div><div class="absolute inset-y-0 left-2/3 border-l border-white/20"></div>
+                            <div class="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-brand-500/70"></div>
+                            <div class="absolute top-3 left-3 bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full" x-text="captureSectors[captureSectorIndex] ? captureSectors[captureSectorIndex].labelRu : ''"></div>
+                            <div x-show="deviceCompassHeading !== null" class="absolute top-3 right-3 bg-black/70 text-white text-xs font-bold px-3 py-1.5 rounded-full" x-text="'Компас: ' + deviceCompassHeading + '°'"></div>
+                            <div class="absolute bottom-3 inset-x-3 bg-black/75 text-white text-xs px-3 py-2 rounded-xl text-center" x-text="captureSectors[captureSectorIndex] ? captureSectors[captureSectorIndex].hintRu : ''"></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-8 gap-1.5">
+                        <template x-for="(frame, i) in capturedFrames" :key="'cf' + i">
+                            <button @click="captureSectorIndex = i" class="aspect-[3/4] rounded-lg overflow-hidden border-2 bg-slate-100 dark:bg-slate-800 relative" :class="captureSectorIndex === i ? 'border-brand-600' : 'border-transparent'">
+                                <img x-show="frame" :src="frame" class="w-full h-full object-cover">
+                                <span class="absolute inset-0 flex items-center justify-center text-[10px] font-black" :class="frame ? 'text-white bg-black/30' : 'text-slate-400'" x-text="(i * 45) + '°'"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <!-- Sector ring -->
+                    <div class="flex justify-center">
+                        <svg viewBox="0 0 120 120" class="w-36 h-36" x-html="captureRingSvg"></svg>
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-500">Привязать к точке на плане</label>
+                        <select x-model="captureTargetPoiId" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs mt-0.5">
+                            <template x-for="poi in (currentSpace.pois || [])" :key="'cp' + poi.id"><option :value="String(poi.id)" :selected="String(poi.id) === captureTargetPoiId" x-text="poi.name.ru"></option></template>
+                        </select>
+                    </div>
+                    <div><label class="text-[11px] text-slate-500">Название панорамы</label><input x-model="captureTitleRu" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs mt-0.5"></div>
+                    <button x-show="!cameraLiveActive" @click="startPhoneCameraStream()" class="w-full bg-slate-900 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="video" class="w-4 h-4"></i>Включить камеру</button>
+                    <button @click="captureCurrentSectorShot()" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-3 rounded-xl text-sm font-black flex items-center justify-center gap-2 shadow-lg"><i data-lucide="aperture" class="w-5 h-5"></i><span x-text="'Снять кадр ' + (captureSectorIndex + 1) + '/8'"></span></button>
+                    <button @click="captureAllDemoSectors()" class="w-full bg-slate-100 dark:bg-slate-800 py-2 rounded-xl text-[11px] font-bold">Тестовая серия (без камеры)</button>
+                    <button @click="stitchAndSaveCapturedPanorama()" :disabled="capturedFramesCount < 2 || isStitchingPano" class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white py-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5"><i data-lucide="combine" class="w-4 h-4"></i><span x-text="isStitchingPano ? 'Сшиваю…' : 'Сшить в панораму 360°'"></span></button>
+                    <ul class="text-[11px] text-slate-500 space-y-1 list-disc pl-4">
+                        <li>Держите телефон вертикально на уровне глаз</li>
+                        <li>Поворачивайтесь вокруг телефона, а не вокруг себя</li>
+                        <li>Соседние кадры должны перекрываться на ~25%</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share / Embed -->
+    <div x-show="shareModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 border border-slate-200 dark:border-slate-800" @click.outside="shareModalOpen = false">
+            <div class="flex items-center justify-between"><h3 class="text-lg font-bold" x-text="t.shareBtn"></h3><button @click="shareModalOpen = false" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            <div x-html="shareQrSvg"></div>
+            <div>
+                <label class="text-[11px] font-bold text-slate-500">Постоянная ссылка на карту</label>
+                <div class="flex gap-2 mt-1"><input readonly :value="shareUrl" class="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs"><button @click="copyTextToClipboard(shareUrl, 'Ссылка скопирована')" class="bg-brand-600 text-white px-3 rounded-lg text-xs font-bold">Копировать</button></div>
+            </div>
+            <div>
+                <label class="text-[11px] font-bold text-slate-500">Код для встраивания на сайт</label>
+                <textarea readonly rows="3" :value="embedIframeCode" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-[11px] font-mono mt-1"></textarea>
+                <div class="flex gap-2 mt-1">
+                    <button @click="copyTextToClipboard(embedIframeCode, 'Код iframe скопирован')" class="flex-1 bg-slate-900 text-white py-2 rounded-lg text-xs font-bold">Копировать iframe</button>
+                    <a :href="'/embed/' + currentSpaceKey" target="_blank" class="flex-1 bg-slate-100 dark:bg-slate-800 py-2 rounded-lg text-xs font-bold text-center">Предпросмотр</a>
+                </div>
+            </div>
+            <p class="text-[11px] text-slate-500">Изменения, сохранённые в редакторе, сразу появляются по этой ссылке — адрес не меняется.</p>
+        </div>
+    </div>
+
+    <!-- New space -->
+    <div x-show="newSpaceModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-3 border border-slate-200 dark:border-slate-800 text-sm" @click.outside="newSpaceModalOpen = false">
+            <h3 class="text-lg font-bold">Новая площадка</h3>
+            <input x-model="newSpaceForm.nameRu" placeholder="Название (например, Форум «Связь-2026»)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5">
+            <input x-model="newSpaceForm.nameEn" placeholder="Название на английском (необязательно)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5">
+            <input x-model="newSpaceForm.slug" placeholder="Адрес ссылки латиницей: svyaz-2026" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5">
+            <select x-model="newSpaceForm.typeRu" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5">
+                <option>Выставочная площадка</option><option>Отель</option><option>Бизнес-центр</option><option>Конференция</option><option>Кампус / Территория</option>
+            </select>
+            <textarea x-model="newSpaceForm.descRu" rows="2" placeholder="Короткое описание для посетителей" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5"></textarea>
+            <div class="flex gap-2 pt-1"><button @click="newSpaceModalOpen = false" class="flex-1 bg-slate-100 dark:bg-slate-800 py-2.5 rounded-xl font-bold">Отмена</button><button @click="createNewSpaceSubmit()" class="flex-1 bg-brand-600 text-white py-2.5 rounded-xl font-bold">Создать</button></div>
+        </div>
+    </div>
+
+    <!-- 3D room model -->
+    <div x-show="room3dModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+        <div class="bg-slate-900 text-white rounded-3xl w-full max-w-3xl shadow-2xl border border-slate-800 overflow-hidden" @click.outside="room3dModalOpen = false">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div><h3 class="font-bold flex items-center gap-2"><i data-lucide="box" class="w-5 h-5 text-brand-500"></i><span x-text="activeRoom3d ? activeRoom3d.title : '3D'"></span></h3>
+                    <p class="text-[11px] text-slate-400" x-text="activeRoom3d ? ('Модель по фотографиям • ' + activeRoom3d.dimensions.widthM + ' × ' + activeRoom3d.dimensions.depthM + ' × ' + activeRoom3d.dimensions.heightM + ' м') : ''"></p></div>
+                <button @click="room3dModalOpen = false" class="p-2 bg-slate-800 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="h-[420px] room3d-scene flex items-center justify-center cursor-grab select-none" style="touch-action:none"
+                 @mousedown="startRoom3dDrag($event)" @mousemove.window="onRoom3dDrag($event)" @mouseup.window="stopRoom3dDrag()"
+                 @touchstart="startRoom3dDrag($event)" @touchmove.prevent="onRoom3dDrag($event)" @touchend="stopRoom3dDrag()">
+                <template x-if="activeRoom3d">
+                    <div class="room3d-box" :style="'transform: rotateX(' + room3dPitch + 'deg) rotateY(' + room3dYaw + 'deg)'">
+                        <div class="room3d-face" :style="'width:260px;height:170px;transform:translateZ(-130px);background-image:url(&quot;' + activeRoom3d.walls[0] + '&quot;)'"></div>
+                        <div class="room3d-face" :style="'width:260px;height:170px;transform:rotateY(90deg) translateZ(-130px);background-image:url(&quot;' + activeRoom3d.walls[1] + '&quot;)'"></div>
+                        <div class="room3d-face" :style="'width:260px;height:170px;transform:rotateY(-90deg) translateZ(-130px);background-image:url(&quot;' + activeRoom3d.walls[2] + '&quot;)'"></div>
+                        <div class="room3d-face" style="width:260px;height:260px;top:-45px;transform:rotateX(90deg) translateZ(-85px);background:repeating-linear-gradient(45deg,#1e293b 0 12px,#334155 12px 24px)"></div>
+                    </div>
+                </template>
+            </div>
+            <div class="p-3 border-t border-slate-800 text-center text-[11px] text-slate-400">Тяните, чтобы вращать модель. Организатор может загрузить свои фото в редакторе: «3D по фото».</div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div x-show="notificationOpen" x-cloak x-transition class="fixed bottom-24 md:bottom-8 right-4 left-4 sm:left-auto z-[60] bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-800 text-xs font-medium sm:max-w-sm">
+        <i data-lucide="bell" class="w-4 h-4 text-brand-500 shrink-0"></i><span x-text="notificationText"></span>
+    </div>
+
+    <!-- ======================= FOOTER ======================= -->
+    <footer x-show="!isEmbedMode && currentView !== 'map'" class="hidden md:block bg-white/95 dark:bg-slate-900/95 border-t border-slate-200 dark:border-slate-800 py-4 px-4 sm:px-8 text-xs text-slate-500 dark:text-slate-400">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div x-text="t.footerCopy"></div>
+            <div class="flex items-center gap-6">
+                <a href="/api/health" target="_blank" class="hover:text-brand-600 transition" x-text="t.privacyApi"></a>
+                <button @click="shareModalOpen = true; refreshIcons()" class="hover:text-brand-600 transition" x-text="t.termsLink"></button>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

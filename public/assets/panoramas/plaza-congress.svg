@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 800" width="2400" height="800">
+  <defs>
+    <linearGradient id="ceil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#050811"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#311018"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#311018"/>
+      <stop offset="100%" stop-color="#090d16"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <!-- Ceiling -->
+  <rect x="0" y="0" width="2400" height="210" fill="url(#ceil)"/>
+  <!-- Main 360 Wall Band -->
+  <rect x="0" y="210" width="2400" height="310" fill="url(#wall)"/>
+  <!-- Floor -->
+  <rect x="0" y="520" width="2400" height="280" fill="url(#floor)"/>
+  <line x1="0" y1="210" x2="2400" y2="210" stroke="#475569" stroke-width="3"/>
+  <line x1="0" y1="520" x2="2400" y2="520" stroke="#E31B23" stroke-width="4" stroke-opacity="0.75"/>
+  <!-- Architectural perspective lines -->
+  <line x1="0" y1="580" x2="2400" y2="580" stroke="#ffffff" stroke-opacity="0.06"/>
+  <line x1="0" y1="650" x2="2400" y2="650" stroke="#ffffff" stroke-opacity="0.08"/>
+  <line x1="0" y1="730" x2="2400" y2="730" stroke="#ffffff" stroke-opacity="0.1"/>
+  <line x1="0" y1="520" x2="0" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="0" y1="0" x2="0" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="150" y1="520" x2="150" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="150" y1="0" x2="150" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="300" y1="520" x2="300" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="300" y1="0" x2="300" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="450" y1="520" x2="450" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="450" y1="0" x2="450" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="600" y1="520" x2="600" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="600" y1="0" x2="600" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="750" y1="520" x2="750" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="750" y1="0" x2="750" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="900" y1="520" x2="900" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="900" y1="0" x2="900" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="1050" y1="520" x2="1050" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="1050" y1="0" x2="1050" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="1200" y1="520" x2="1200" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="1200" y1="0" x2="1200" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="1350" y1="520" x2="1350" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="1350" y1="0" x2="1350" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="1500" y1="520" x2="1500" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="1500" y1="0" x2="1500" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="1650" y1="520" x2="1650" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="1650" y1="0" x2="1650" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="1800" y1="520" x2="1800" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="1800" y1="0" x2="1800" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="1950" y1="520" x2="1950" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="1950" y1="0" x2="1950" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="2100" y1="520" x2="2100" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="2100" y1="0" x2="2100" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="2250" y1="520" x2="2250" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="2250" y1="0" x2="2250" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/><line x1="2400" y1="520" x2="2400" y2="800" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/><line x1="2400" y1="0" x2="2400" y2="210" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/>
+  
+      <ellipse cx="150" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="150" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+      <ellipse cx="450" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="450" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+      <ellipse cx="750" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="750" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+      <ellipse cx="1050" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="1050" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+      <ellipse cx="1350" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="1350" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+      <ellipse cx="1650" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="1650" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+      <ellipse cx="1950" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="1950" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+      <ellipse cx="2250" cy="115" rx="75" ry="16" fill="#ffffff" opacity="0.88"/>
+      <ellipse cx="2250" cy="115" rx="120" ry="30" fill="#E31B23" opacity="0.16"/>
+    
+  <!-- Seamless columns at 0 and 2400 -->
+  <rect x="-25" y="190" width="50" height="350" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  <rect x="2375" y="190" width="50" height="350" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  <rect x="575" y="190" width="50" height="350" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  <rect x="1175" y="190" width="50" height="350" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  <rect x="1775" y="190" width="50" height="350" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  
+    <!-- LED Stage -->
+    <rect x="80" y="225" width="460" height="255" rx="8" fill="#020617" stroke="#E31B23" stroke-width="4"/>
+    <text x="310" y="335" font-family="Arial, sans-serif" font-weight="900" font-size="38" fill="#E31B23" text-anchor="middle">КОНГРЕСС-ХОЛЛ ТТК</text>
+    <text x="310" y="380" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#f8fafc" text-anchor="middle">LED-СЦЕНА 8×4 М • 120 МЕСТ</text>
+    <rect x="40" y="480" width="540" height="45" fill="#7f1d1d"/>
+    <!-- Acoustic Panels -->
+    <rect x="700" y="255" width="400" height="220" rx="10" fill="#1f2937" stroke="#E31B23" stroke-width="2"/>
+    <text x="900" y="370" font-family="Arial, sans-serif" font-weight="800" font-size="22" fill="#e5e7eb" text-anchor="middle">ЗОНА ПРЕССЫ И СИНХРОННОГО ПЕРЕВОДА</text>
+    <!-- Entrance Foyer -->
+    <rect x="1320" y="245" width="360" height="275" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/>
+    <text x="1500" y="375" font-family="Arial, sans-serif" font-weight="800" font-size="22" fill="#ffffff" text-anchor="middle">ВЫХОД В ФОЙЕ КОРПУСА B</text>
+    <rect x="1900" y="255" width="380" height="220" rx="10" fill="#1f2937" stroke="#38bdf8" stroke-width="2"/>
+    <text x="2090" y="370" font-family="Arial, sans-serif" font-weight="800" font-size="22" fill="#38bdf8" text-anchor="middle">ПУЛЬТОВАЯ СВЕТ / ЗВУК</text>
+  
+  <!-- Compass subtle markers on ceiling -->
+  <g fill="#94a3b8" font-family="Arial, sans-serif" font-size="16" font-weight="700" opacity="0.55" text-anchor="middle">
+    <text x="300" y="192">СЕВЕР • 0°</text>
+    <text x="900" y="192">ВОСТОК • 90°</text>
+    <text x="1500" y="192">ЮГ • 180°</text>
+    <text x="2100" y="192">ЗАПАД • 270°</text>
+  </g>
+</svg>

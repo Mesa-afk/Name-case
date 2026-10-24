@@ -1,0 +1,31 @@
+{
+  "name": "ttk-space-navigator",
+  "version": "1.0.0",
+  "description": "Интерактивная карта пространств, 360°-панорамы и навигация внутри зданий и на мероприятиях (ТТК)",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --no-warnings server/index.js",
+    "dev": "node --no-warnings --watch server/index.js",
+    "seed": "node --no-warnings server/database/seed-cli.js"
+  },
+  "keywords": [
+    "indoor-navigation",
+    "interactive-map",
+    "panorama-360",
+    "floorplan-editor",
+    "pwa",
+    "ttk"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.5.0"
+  }
+}
