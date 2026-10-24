@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap');
+
+body {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-style: normal;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 6px;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #334155;
+}
+
+/* 360 Panorama Viewport */
+.pano-viewport {
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    overflow: hidden;
+    position: relative;
+}
+
+.pano-viewport:active {
+    cursor: grabbing;
+}
+
+.pano-equirect {
+    background-repeat: repeat-x;
+    background-position-y: center;
+    will-change: background-position, background-size;
+}
+
+/* Animated Route Path on 2D & 3D Map */
+@keyframes stroke-dash {
+    to {
+        stroke-dashoffset: -28;
+    }
+}
+
+.animate-route {
+    stroke-dasharray: 8 6;
+    animation: stroke-dash 0.95s linear infinite;
+}
+
+/* Pulse Ring for Selected / Active POI & Hotspots */
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.85;
+    }
+    70% {
+        transform: scale(1.55);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1.55);
+        opacity: 0;
+    }
+}
+
+.poi-pulse {
+    animation: pulse-ring 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+    transform-origin: center;
+    transform-box: fill-box;
+}
+
+/* 3D Floor Isometric / Perspective Mode */
+.map-3d-stage {
+    perspective: 1200px;
+}
+
+.map-3d-plane {
+    transform-style: preserve-3d;
+    transition: transform 0.25s ease-out;
+}
+
+/* 3D Room Reconstruction Cube */
+.room3d-scene {
+    perspective: 900px;
+}
+
+.room3d-box {
+    position: relative;
+    width: 260px;
+    height: 170px;
+    transform-style: preserve-3d;
+    transition: transform 0.12s ease-out;
+}
+
+.room3d-face {
+    position: absolute;
+    backface-visibility: visible;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid rgba(227, 27, 35, 0.65);
+}
+
+/* Editor Crosshair */
+.editor-canvas-crosshair {
+    cursor: crosshair;
+}
+
+/* Safe area padding for mobile bottom bar */
+.pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+}
+
+html, body {
+    background-color: #ffffff;
+}
+
+.dark, .dark body {
+    background-color: #020617;
+}
